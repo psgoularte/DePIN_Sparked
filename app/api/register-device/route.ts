@@ -1,15 +1,16 @@
-export const runtime = "nodejs"; // força ambiente Node.js
+export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
-import { createOnchainAccount } from "@/lib/solanaService";
 import { addOrUpdateDevice, getDevice } from "@/lib/deviceRegistry";
-import { sha256 } from "js-sha256";
+import { createOnchainAccount } from "@/lib/solanaService";
 
 export async function POST(req: NextRequest) {
   try {
-    // Importa elliptic dinamicamente — evita erro no build
+    // Importa libs nativas/difíceis dinamicamente
+    const { randomBytes } = await import("crypto");
+    const { sha256 } = await import("js-sha256");
     const { ec: EC } = await import("elliptic");
+
     const ec = new EC("secp256k1");
 
     const body = await req.json();
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ challenge: nonce });
     }
 
-    // === Etapa 2: validar assinatura do challenge ===
+    // === Etapa 2: validar assinatura ===
     const device = await getDevice(publicKey);
     if (!device || !device.challenge) {
       return NextResponse.json(
@@ -53,10 +54,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Cria a conta on-chain
+    // === Cria conta on-chain ===
     const { nftAddress, txSignature } = await createOnchainAccount();
 
-    // Atualiza o registro do dispositivo
     await addOrUpdateDevice(publicKey, {
       macAddress,
       publicKey,
