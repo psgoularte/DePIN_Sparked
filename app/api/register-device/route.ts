@@ -1,17 +1,17 @@
-export const runtime = "nodejs"; // Garante que use ambiente Node (com crypto, Buffer, etc.)
+export const runtime = "nodejs"; // força ambiente Node.js
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { createOnchainAccount } from "@/lib/solanaService";
 import { addOrUpdateDevice, getDevice } from "@/lib/deviceRegistry";
-import * as elliptic from "elliptic";
 import { sha256 } from "js-sha256";
-
-const EC = elliptic.ec;
-const ec = new EC("secp256k1");
 
 export async function POST(req: NextRequest) {
   try {
+    // Importa elliptic dinamicamente — evita erro no build
+    const { ec: EC } = await import("elliptic");
+    const ec = new EC("secp256k1");
+
     const body = await req.json();
     const { macAddress, publicKey, signature, challenge } = body;
 
