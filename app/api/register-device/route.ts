@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { createOnchainAccount } from "@/lib/solanaService";
 import { addOrUpdateDevice, getDevice } from "@/lib/deviceRegistry";
-import elliptic from "elliptic";
-import { sha256 } from "js-sha256";
-
-const ec = new elliptic.ec("secp256k1");
+import { verify } from "@noble/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -17,7 +16,7 @@ export async function POST(req: NextRequest) {
 
   // === Etapa 1: gerar challenge ===
   if (!signature && !challenge) {
-    const nonce = randomBytes(32).toString("hex");
+    const nonce = bytesToHex(randomBytes(32));
     await addOrUpdateDevice(publicKey, {
       macAddress,
       publicKey,
@@ -29,15 +28,15 @@ export async function POST(req: NextRequest) {
   // === Etapa 2: validar assinatura do challenge ===
   const device = await getDevice(publicKey);
   if (!device || !device.challenge) {
-    return NextResponse.json({ error: "challenge não encontrado" }, { status: 400 });
+    return NextResponse.json({ error: "Challenge não encontrado ou já utilizado" }, { status: 400 });
   }
 
   try {
-    const pub = ec.keyFromPublic(publicKey, "hex");
-    const hashHex = sha256(Buffer.from(device.challenge, "hex"));
-    const verified = pub.verify(hashHex, signature);
-    if (!verified) {
-      return NextResponse.json({ error: "assinatura inválida" }, { status: 401 });
+    const messageHash = sha256(hexToBytes(device.challenge));
+    const isVerified = verify(signature, messageHash, publicKey);
+
+    if (!isVerified) {
+      return NextResponse.json({ error: "Assinatura inválida" }, { status: 401 });
     }
 
     const { nftAddress, txSignature } = await createOnchainAccount();
@@ -59,6 +58,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("Erro no registro:", err);
-    return NextResponse.json({ error: "Erro ao registrar dispositivo" }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao registrar dispositivo", details: err.message }, { status: 500 });
   }
 }
