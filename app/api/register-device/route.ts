@@ -46,20 +46,26 @@ export async function POST(req: NextRequest) {
       macAddress: device.macAddress,
     };
 
+    let claimToken: string | null = null;
+
     if (!device.nftAddress) {
-    console.log("Creating and minting a new NFT for the device...");
-    // Mude a chamada aqui!
-    const result = await createAndMintNft(); 
-    finalDeviceData.nftAddress = result.nftAddress;
-    finalDeviceData.txSignature = result.txSignature;
-    console.log(`NFT created: ${result.nftAddress}`);
-  }
+      console.log("Creating and minting a new NFT for the device...");
+      const result = await createAndMintNft();
+      finalDeviceData.nftAddress = result.nftAddress;
+      finalDeviceData.txSignature = result.txSignature;
+
+      claimToken = crypto.randomBytes(16).toString("hex");
+      finalDeviceData.claimToken = claimToken;
+
+      console.log(`NFT created: ${result.nftAddress} with claim token.`);
+    }
 
     const updatedDevice = await addOrUpdateDevice(publicKey, finalDeviceData);
 
     return NextResponse.json({
       nftAddress: updatedDevice.nftAddress,
       txSignature: updatedDevice.txSignature,
+      claimToken: claimToken 
     });
 
   } catch (err: any) {
