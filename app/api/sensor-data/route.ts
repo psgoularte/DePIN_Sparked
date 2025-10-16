@@ -24,11 +24,10 @@ async function analyzeWithFallbackModel(payloadString: string, HUGGINGFACE_TOKEN
     return { isCoherent, reason, rawResult: result };
   } catch (error) {
     console.error("Fallback AI analysis failed:", error);
-    throw error; // Propagate the error if the fallback also fails
+    throw error; 
   }
 }
 
-// --- Primary Analyzer ---
 async function analyzeDataWithHuggingFace(payloadString: string) {
   const PRIMARY_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
   const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_API_KEY;
@@ -55,7 +54,6 @@ ${payloadString}
       }),
     });
 
-    // If the primary model is unavailable, trigger the fallback
     if (response.status === 404 || response.status === 503) {
       return await analyzeWithFallbackModel(payloadString, HUGGINGFACE_TOKEN);
     }
@@ -75,7 +73,7 @@ ${payloadString}
     try {
         return await analyzeWithFallbackModel(payloadString, HUGGINGFACE_TOKEN);
     } catch (fallbackError) {
-        throw fallbackError; // If fallback also fails, then we give up
+        throw fallbackError; 
     }
   }
 }
@@ -124,18 +122,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
+    const now = Date.now();
+    const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+
+    if (device.lastTsSeen) {
+      const timeSinceLastPost = now - device.lastTsSeen;
+      if (timeSinceLastPost < TEN_MINUTES_IN_MS) {
+        const timeLeft = Math.ceil((TEN_MINUTES_IN_MS - timeSinceLastPost) / 1000 / 60);
+        return NextResponse.json(
+          { 
+            error: "Rate limit exceeded. Please wait before sending more data.",
+            details: `You can send data again in approximately ${timeLeft} minute(s).`
+          }, 
+          { status: 429 } 
+        );
+      }
+    }
+
     console.log(`✅ Data received from ${nftAddress} and verified (Timestamp OK):`, payload);
 
-    // Update last seen timestamp for rate-limiting purposes
     try {
       await addOrUpdateDevice(device.publicKey, { 
-        macAddress: device.macAddress, 
-        nftAddress: device.nftAddress, 
-        lastTsSeen: Date.now() 
+        macAddress: device.macAddress,
+        nftAddress: device.nftAddress,
+        lastTsSeen: now 
       });
     } catch (dbError: any) {
       console.error("Failed to update lastTsSeen:", dbError.message);
     }
+    
     let aiAnalysis: any = null;
     try {
       aiAnalysis = await analyzeDataWithHuggingFace(payloadString);
