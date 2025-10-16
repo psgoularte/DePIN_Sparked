@@ -17,7 +17,7 @@ const keyPair = ec.keyFromPrivate(privateKeyHex, "hex");
 const pubKeyXY = keyPair.getPublic(false, "hex");
 const publicKeyToBackend = "04" + pubKeyXY;
 
-async function registerDevice() {
+async function main() {
   try {
     // ===============================
     // 1️⃣ Solicitar challenge
@@ -117,4 +117,4 @@ async function registerDevice() {
 }
 
 // Executa o fluxo completo
-registerDevice();
+main();
