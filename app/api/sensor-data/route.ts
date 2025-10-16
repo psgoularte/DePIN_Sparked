@@ -3,10 +3,27 @@ import { getDeviceByNft, addOrUpdateDevice } from "@/lib/deviceRegistry";
 import stringify from "json-stable-stringify";
 
 async function analyzeDataWithHuggingFace(payloadString: string) {
-  // ✅ FIX: Switched to a highly available Zero-Shot Classification model
-  const API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli";
+  const API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
   const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_API_KEY;
   if (!HUGGINGFACE_TOKEN) throw new Error("Hugging Face API key is not set.");
+
+  const prompt = `
+[INST]
+You are a highly intelligent data analyst. Your task is to perform a common-sense plausibility check on the following JSON payload. The data source is generic and could be anything.
+
+You must infer the likely context from the JSON keys. Look for:
+1.  Internal contradictions.
+2.  Extreme or physically impossible values for the inferred context.
+3.  Factual inaccuracies about the real world.
+
+Based on this general analysis, does the data seem plausible and coherent? Answer only with the word "YES" or the word "NO".
+
+JSON to Analyze:
+\`\`\`json
+${payloadString}
+\`\`\`
+[/INST]
+`;
   
   try {
     const response = await fetch(API_URL, {
@@ -16,25 +33,31 @@ async function analyzeDataWithHuggingFace(payloadString: string) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        inputs: payloadString,
-        parameters: {
-          candidate_labels: ["coherent data", "anomaly data"],
-        },
+        inputs: prompt,
+        parameters: { max_new_tokens: 5 } // Limit response length
       }),
     });
 
     if (!response.ok) {
         const errorText = await response.text();
+        if (response.status === 503) {
+            console.warn("Hugging Face model is loading, try again in a moment.");
+            return { error: "Model is currently loading.", details: errorText };
+        }
         console.error("Hugging Face API Error:", errorText);
         throw new Error(`Hugging Face API request failed with status ${response.status}`);
     }
 
     const result = await response.json();
-    
-    const isCoherent = result.labels[0] === "coherent data";
-    const reason = `The data was classified as '${result.labels[0]}' with a confidence score of ${result.scores[0].toFixed(2)}.`;
+    const generatedText = result[0]?.generated_text || "";
+    const answer = generatedText.split('[/INST]').pop()?.trim() || "NO";
 
-    return { isCoherent, reason, rawResult: result };
+    const isCoherent = answer.toUpperCase().startsWith("YES");
+    const reason = isCoherent
+      ? "The AI deemed the data plausible based on common-sense reasoning."
+      : `The AI deemed the data implausible. Raw answer: '${answer}'`;
+
+    return { isCoherent, reason, rawAnswer: answer };
 
   } catch (error) {
     console.error("Failed to analyze data with Hugging Face:", error);
