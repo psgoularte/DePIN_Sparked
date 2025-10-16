@@ -1,6 +1,5 @@
-// app/api/register-device/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { addOrUpdateDevice, getDeviceByPubKey } from "@/lib/deviceRegistry";
+import { addOrUpdateDevice, getDeviceByPubKey, DeviceEntry } from "@/lib/deviceRegistry";
 import crypto from "crypto";
 import { createOnchainAccount } from "@/lib/solanaService";
 
@@ -9,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { macAddress, publicKey, challenge, signature } = body;
 
-    // --- Etapa 1: Request challenge ---
+    // --- Etapa 1: Cliente solicita um challenge ---
     if (!challenge && !signature) {
       if (!macAddress || !publicKey) {
         return NextResponse.json(
@@ -18,16 +17,15 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Gerar challenge aleatório (hex string 32 bytes)
       const challengeValue = crypto.randomBytes(32).toString("hex");
 
-      // Salvar temporariamente no registro do dispositivo (ou DB)
       await addOrUpdateDevice(publicKey, { macAddress, challenge: challengeValue });
 
+      console.log(`Challenge issued for publicKey: ${publicKey.substring(0, 20)}...`);
       return NextResponse.json({ challenge: challengeValue });
     }
 
-    // --- Etapa 2: Respond with signed challenge ---
+    // --- Etapa 2: Cliente responde com a assinatura do challenge ---
     if (!publicKey || !challenge || !signature) {
       return NextResponse.json(
         { error: "Missing fields for signature verification" },
@@ -35,52 +33,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Import dinâmico (evita erro no build)
+    const device = await getDeviceByPubKey(publicKey);
+    if (!device || device.challenge !== challenge) {
+      console.error("Invalid challenge or device not found.");
+      return NextResponse.json({ error: "Invalid challenge or device not found" }, { status: 401 });
+    }
+
     const elliptic = await import("elliptic");
     const { sha256 } = await import("js-sha256");
     const BN = (await import("bn.js")).default;
 
     const ec = new elliptic.ec("secp256k1");
 
-    // Buscar dispositivo e validar challenge
-    const device = await getDeviceByPubKey(publicKey);
-    if (!device || device.challenge !== challenge) {
-      return NextResponse.json({ error: "Invalid challenge" }, { status: 401 });
-    }
-
-    // Verifica a assinatura
     const msgHash = sha256(challenge);
     const key = ec.keyFromPublic(publicKey, "hex");
+    
     const sig = {
       r: new BN(signature.r, 16),
       s: new BN(signature.s, 16),
     };
 
-    const valid = key.verify(msgHash, sig);
-    if (!valid) {
+    const isSignatureValid = key.verify(msgHash, sig);
+    if (!isSignatureValid) {
+      console.error("Invalid signature.");
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
+    
+    console.log(`Signature verified for publicKey: ${publicKey.substring(0, 20)}...`);
 
-    // --- Registro final ---
-    // Limpa o challenge
-    await addOrUpdateDevice(publicKey, { challenge: undefined });
+    const finalDeviceData: Partial<DeviceEntry> = {
+      challenge: undefined, 
+      macAddress: device.macAddress, 
+    };
 
-    // Se já tiver NFT, retorna; senão cria novo na blockchain Solana
-    let nftAddress = device.nftAddress;
-    let txSignature: string | null = null;
-
-    if (!nftAddress) {
+    if (!device.nftAddress) {
+      console.log("Creating new on-chain account for device...");
       const result = await createOnchainAccount();
-      nftAddress = result.nftAddress;
-      txSignature = result.txSignature;
-
-      // Atualiza registro do dispositivo com NFT e txSignature
-      await addOrUpdateDevice(publicKey, { nftAddress, txSignature });
+      finalDeviceData.nftAddress = result.nftAddress;
+      finalDeviceData.txSignature = result.txSignature;
+      console.log(`On-chain account created: ${result.nftAddress}`);
     }
 
-    return NextResponse.json({ nftAddress, txSignature });
+    const updatedDevice = await addOrUpdateDevice(publicKey, finalDeviceData);
+
+    return NextResponse.json({
+      nftAddress: updatedDevice.nftAddress,
+      txSignature: updatedDevice.txSignature,
+    });
+
   } catch (err: any) {
-    console.error("Register device error:", err);
+    console.error("Register device API error:", err);
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }
