@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.4.1",
     "@metaplex-foundation/umi-bundle-defaults": "^1.4.1",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "^3.0.0",
