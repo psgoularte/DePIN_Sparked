@@ -3,7 +3,7 @@ import { getDeviceByNft, addOrUpdateDevice } from "@/lib/deviceRegistry";
 import stringify from "json-stable-stringify";
 
 async function analyzeDataWithHuggingFace(payloadString: string) {
-  const API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base";
+  const API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
   const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_API_KEY;
   if (!HUGGINGFACE_TOKEN) throw new Error("Hugging Face API key is not set.");
 
@@ -82,11 +82,14 @@ export async function POST(req: NextRequest) {
 
     // Update last seen timestamp for rate-limiting purposes
     try {
-      await addOrUpdateDevice(device.publicKey, { lastTsSeen: Date.now() });
+      await addOrUpdateDevice(device.publicKey, { 
+        macAddress: device.macAddress, 
+        nftAddress: device.nftAddress, 
+        lastTsSeen: Date.now() 
+      });
     } catch (dbError: any) {
       console.error("Failed to update lastTsSeen:", dbError.message);
     }
-    
     let aiAnalysis: any = null;
     try {
       aiAnalysis = await analyzeDataWithHuggingFace(payloadString);
