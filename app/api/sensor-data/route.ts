@@ -2,21 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDeviceByNft, addOrUpdateDevice } from "@/lib/deviceRegistry";
 import stringify from "json-stable-stringify";
 
+async function analyzeWithFallbackModel(payloadString: string, HUGGINGFACE_TOKEN: string) {
+  console.log("⚠️ Primary AI model failed. Using fallback classification model.");
+  const API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli";
+  
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${HUGGINGFACE_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inputs: payloadString,
+        parameters: { candidate_labels: ["plausible data", "implausible data"] },
+      }),
+    });
+
+    if (!response.ok) throw new Error("Fallback model also failed.");
+
+    const result = await response.json();
+    const isCoherent = result.labels[0] === "plausible data";
+    const reason = `Fallback analysis classified data as '${result.labels[0]}' with score ${result.scores[0].toFixed(2)}.`;
+    return { isCoherent, reason, rawResult: result };
+  } catch (error) {
+    console.error("Fallback AI analysis failed:", error);
+    throw error; // Propagate the error if the fallback also fails
+  }
+}
+
+// --- Primary Analyzer ---
 async function analyzeDataWithHuggingFace(payloadString: string) {
-  const API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
+  const PRIMARY_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
   const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_API_KEY;
   if (!HUGGINGFACE_TOKEN) throw new Error("Hugging Face API key is not set.");
 
   const prompt = `
 [INST]
-You are a highly intelligent data analyst. Your task is to perform a common-sense plausibility check on the following JSON payload. The data source is generic and could be anything.
-
-You must infer the likely context from the JSON keys. Look for:
-1.  Internal contradictions.
-2.  Extreme or physically impossible values for the inferred context.
-3.  Factual inaccuracies about the real world.
-
-Based on this general analysis, does the data seem plausible and coherent? Answer only with the word "YES" or the word "NO".
+You are a common-sense data analyst. Look at the JSON payload below. Does it describe a plausible, real-world situation, or is it an anomaly/absurd? Answer only with "YES" for plausible or "NO" for implausible.
 
 JSON to Analyze:
 \`\`\`json
@@ -24,44 +44,39 @@ ${payloadString}
 \`\`\`
 [/INST]
 `;
-  
+
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(PRIMARY_API_URL, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${HUGGINGFACE_TOKEN}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Authorization": `Bearer ${HUGGINGFACE_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         inputs: prompt,
-        parameters: { max_new_tokens: 5 } // Limit response length
+        parameters: { max_new_tokens: 5 }
       }),
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 503) {
-            console.warn("Hugging Face model is loading, try again in a moment.");
-            return { error: "Model is currently loading.", details: errorText };
-        }
-        console.error("Hugging Face API Error:", errorText);
-        throw new Error(`Hugging Face API request failed with status ${response.status}`);
+    // If the primary model is unavailable, trigger the fallback
+    if (response.status === 404 || response.status === 503) {
+      return await analyzeWithFallbackModel(payloadString, HUGGINGFACE_TOKEN);
     }
+    if (!response.ok) throw new Error(`Primary model request failed with status ${response.status}`);
 
     const result = await response.json();
     const generatedText = result[0]?.generated_text || "";
     const answer = generatedText.split('[/INST]').pop()?.trim() || "NO";
-
     const isCoherent = answer.toUpperCase().startsWith("YES");
     const reason = isCoherent
-      ? "The AI deemed the data plausible based on common-sense reasoning."
-      : `The AI deemed the data implausible. Raw answer: '${answer}'`;
-
+      ? "Primary AI deemed the data plausible."
+      : `Primary AI deemed the data implausible. Raw answer: '${answer}'`;
     return { isCoherent, reason, rawAnswer: answer };
 
   } catch (error) {
-    console.error("Failed to analyze data with Hugging Face:", error);
-    throw error;
+    console.error("Failed to analyze data with Hugging Face primary model, attempting fallback:", error);
+    try {
+        return await analyzeWithFallbackModel(payloadString, HUGGINGFACE_TOKEN);
+    } catch (fallbackError) {
+        throw fallbackError; // If fallback also fails, then we give up
+    }
   }
 }
 
