@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     const { publicKey, signature, message, nftAddress } = body;
 
-    if (!publicKey || !signature || !message || !nftAddress) {
+    if (!publicKey || !signature || !message) {
       return NextResponse.json(
         { error: "Missing fields in request" },
         { status: 400 }
