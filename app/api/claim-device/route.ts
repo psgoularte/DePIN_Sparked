@@ -17,15 +17,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (device.ownerAddress) {
-      return NextResponse.json({ error: "Device has already been claimed" }, { status: 409 }); 
+      return NextResponse.json({ error: "Device has already been claimed" }, { status: 409 });
     }
 
     if (!device.nftAddress) {
-      console.error(`Attempted to claim device with publicKey ${device.publicKey}, but it has no nftAddress.`);
-      return NextResponse.json(
-        { error: "Cannot claim device: NFT address is missing in the registry. This is an internal error." }, 
-        { status: 500 } 
-      );
+      return NextResponse.json({ error: "Cannot claim device: NFT address is missing." }, { status: 500 });
     }
 
     console.log(`Transferring NFT ${device.nftAddress} to ${ownerWalletAddress}...`);
@@ -33,8 +29,10 @@ export async function POST(req: NextRequest) {
     console.log(`Transfer successful! Signature: ${txSignature}`);
 
     await addOrUpdateDevice(device.publicKey, {
-      ownerAddress: ownerWalletAddress,
-      claimToken: null, 
+      macAddress: device.macAddress,     
+      nftAddress: device.nftAddress,   
+      ownerAddress: ownerWalletAddress,  
+      claimToken: null,                  
     });
 
     return NextResponse.json({ success: true, transactionSignature: txSignature });
