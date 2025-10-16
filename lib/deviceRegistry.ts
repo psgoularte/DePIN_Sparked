@@ -44,11 +44,17 @@ export async function getDeviceByNft(nftAddress: string): Promise<DeviceEntry | 
   return Object.values(reg).find((d) => d.nftAddress === nftAddress) || null;
 }
 
-export async function addOrUpdateDevice(publicKey: string, data: Partial<DeviceEntry>) {
+export async function addOrUpdateDevice(publicKey: string, data: Partial<DeviceEntry>): Promise<DeviceEntry> {
   const reg = await loadRegistry();
   const existing = reg[publicKey] || {};
   reg[publicKey] = { ...existing, ...data } as DeviceEntry;
   await saveRegistry(reg);
+  return reg[publicKey]; // <-- retorna o device atualizado
+}
+
+export async function getDeviceByPubKey(publicKey: string): Promise<DeviceEntry | null> {
+  const reg = await loadRegistry();
+  return reg[publicKey] || null;
 }
 
 export async function revokeDevice(nftAddress: string) {
