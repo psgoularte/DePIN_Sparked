@@ -2,11 +2,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addOrUpdateDevice, getDeviceByPubKey } from "@/lib/deviceRegistry";
 import crypto from "crypto";
+import { createOnchainAccount } from "@/lib/solanaService";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-
     const { macAddress, publicKey, challenge, signature } = body;
 
     // --- Etapa 1: Request challenge ---
@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
 
     const ec = new elliptic.ec("secp256k1");
 
-    const device = await addOrUpdateDevice(publicKey, { challenge });
+    // Buscar dispositivo e validar challenge
+    const device = await getDeviceByPubKey(publicKey);
     if (!device || device.challenge !== challenge) {
       return NextResponse.json({ error: "Invalid challenge" }, { status: 401 });
     }
@@ -61,16 +62,23 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Registro final ---
-    const updatedDevice = await addOrUpdateDevice(publicKey, {
-      macAddress: device.macAddress,
-      challenge: undefined , // limpa challenge
-    });
+    // Limpa o challenge
+    await addOrUpdateDevice(publicKey, { challenge: undefined });
 
-    // Aqui você pode gerar ou recuperar o NFT associado
-    const nftAddress = updatedDevice.nftAddress || "NFT_" + crypto.randomBytes(16).toString("hex");
-    updatedDevice.nftAddress = nftAddress;
+    // Se já tiver NFT, retorna; senão cria novo na blockchain Solana
+    let nftAddress = device.nftAddress;
+    let txSignature: string | null = null;
 
-    return NextResponse.json({ nftAddress });
+    if (!nftAddress) {
+      const result = await createOnchainAccount();
+      nftAddress = result.nftAddress;
+      txSignature = result.txSignature;
+
+      // Atualiza registro do dispositivo com NFT e txSignature
+      await addOrUpdateDevice(publicKey, { nftAddress, txSignature });
+    }
+
+    return NextResponse.json({ nftAddress, txSignature });
   } catch (err: any) {
     console.error("Register device error:", err);
     return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });

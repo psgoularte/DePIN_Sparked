@@ -1,6 +1,7 @@
-import fs from "fs/promises";
-import path from "path";
+// Importe seu cliente supabase já configurado
+import { supabase } from './supabaseClient'; // Ajuste o caminho se necessário
 
+// A interface permanece a mesma
 export interface DeviceEntry {
   macAddress: string;
   publicKey: string;
@@ -11,56 +12,90 @@ export interface DeviceEntry {
   challenge?: string;
 }
 
-const dataDir = path.join(process.cwd(), "data");
-const registryFile = path.join(dataDir, "device_registry.json");
-
-async function ensureFile() {
-  try {
-    await fs.mkdir(dataDir, { recursive: true });
-    await fs.access(registryFile);
-  } catch {
-    await fs.writeFile(registryFile, JSON.stringify({}, null, 2));
-  }
-}
-
-export async function loadRegistry(): Promise<Record<string, DeviceEntry>> {
-  await ensureFile();
-  const data = await fs.readFile(registryFile, "utf8");
-  return JSON.parse(data);
-}
-
-export async function saveRegistry(registry: Record<string, DeviceEntry>) {
-  await ensureFile();
-  await fs.writeFile(registryFile, JSON.stringify(registry, null, 2));
-}
-
-export async function getDevice(publicKey: string): Promise<DeviceEntry | null> {
-  const reg = await loadRegistry();
-  return reg[publicKey] || null;
-}
-
-export async function getDeviceByNft(nftAddress: string): Promise<DeviceEntry | null> {
-  const reg = await loadRegistry();
-  return Object.values(reg).find((d) => d.nftAddress === nftAddress) || null;
-}
-
-export async function addOrUpdateDevice(publicKey: string, data: Partial<DeviceEntry>): Promise<DeviceEntry> {
-  const reg = await loadRegistry();
-  const existing = reg[publicKey] || {};
-  reg[publicKey] = { ...existing, ...data } as DeviceEntry;
-  await saveRegistry(reg);
-  return reg[publicKey]; // <-- retorna o device atualizado
-}
-
+/**
+ * Busca um dispositivo pela sua chave pública (Primary Key).
+ * @param publicKey A chave pública do dispositivo.
+ * @returns O dispositivo ou null se não for encontrado.
+ */
 export async function getDeviceByPubKey(publicKey: string): Promise<DeviceEntry | null> {
-  const reg = await loadRegistry();
-  return reg[publicKey] || null;
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('publicKey', publicKey)
+    .single(); // .single() retorna um único objeto ou null
+
+  if (error && error.code !== 'PGRST116') {
+    // PGRST116 é o código para "nenhuma linha encontrada", o que é esperado
+    console.error("Erro ao buscar dispositivo por publicKey:", error);
+    throw error;
+  }
+
+  return data;
 }
 
-export async function revokeDevice(nftAddress: string) {
-  const reg = await loadRegistry();
-  const key = Object.keys(reg).find((k) => reg[k].nftAddress === nftAddress);
-  if (!key) throw new Error("Device não encontrado");
-  reg[key].revoked = true;
-  await saveRegistry(reg);
+/**
+ * Busca um dispositivo pelo endereço do seu NFT.
+ * @param nftAddress O endereço do NFT associado ao dispositivo.
+ * @returns O dispositivo ou null se não for encontrado.
+ */
+export async function getDeviceByNft(nftAddress: string): Promise<DeviceEntry | null> {
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('nftAddress', nftAddress)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error("Erro ao buscar dispositivo por NFT:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Adiciona um novo dispositivo ou atualiza um existente.
+ * Usa o método `upsert` do Supabase para eficiência.
+ * @param publicKey A chave pública do dispositivo a ser atualizado/inserido.
+ * @param deviceData Os dados parciais para atualizar ou os dados completos para inserir.
+ * @returns O dispositivo criado ou atualizado.
+ */
+export async function addOrUpdateDevice(publicKey: string, deviceData: Partial<DeviceEntry>): Promise<DeviceEntry> {
+  const deviceToUpsert = {
+    publicKey, // Garante que a chave primária está no objeto
+    ...deviceData,
+  };
+
+  const { data, error } = await supabase
+    .from('devices')
+    .upsert(deviceToUpsert)
+    .select()
+    .single(); // Retorna o objeto atualizado
+
+  if (error || !data) {
+    console.error("Erro ao adicionar ou atualizar dispositivo:", error);
+    throw error || new Error("Não foi possível obter os dados do dispositivo após a operação.");
+  }
+
+  return data;
+}
+
+/**
+ * Marca um dispositivo como revogado buscando-o pelo endereço do NFT.
+ * @param nftAddress O endereço do NFT do dispositivo a ser revogado.
+ */
+export async function revokeDevice(nftAddress: string): Promise<void> {
+  const { error, count } = await supabase
+    .from('devices')
+    .update({ revoked: true })
+    .eq('nftAddress', nftAddress);
+
+  if (error) {
+    console.error("Erro ao revogar dispositivo:", error);
+    throw error;
+  }
+
+  if (count === 0) {
+    throw new Error("Dispositivo não encontrado para revogar.");
+  }
 }
