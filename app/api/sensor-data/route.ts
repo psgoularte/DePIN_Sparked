@@ -3,31 +3,39 @@ import { getDeviceByNft, addOrUpdateDevice } from "@/lib/deviceRegistry";
 import stringify from "json-stable-stringify";
 
 async function analyzeDataWithHuggingFace(payloadString: string) {
-  const API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
+  // ✅ FIX: Switched to a highly available Zero-Shot Classification model
+  const API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-mnli";
   const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_API_KEY;
   if (!HUGGINGFACE_TOKEN) throw new Error("Hugging Face API key is not set.");
-
-  const prompt = `
-    Context: You are an IoT data analyst.
-    Task: Analyze the following JSON and determine if the data is coherent or an anomaly.
-    Data: ${payloadString}
-    Question: Does this data look coherent between thmeselves? Answer only with "YES" or "NO".
-  `;
   
   try {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${HUGGINGFACE_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ inputs: prompt }),
+      headers: {
+        "Authorization": `Bearer ${HUGGINGFACE_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inputs: payloadString,
+        parameters: {
+          candidate_labels: ["coherent data", "anomaly data"],
+        },
+      }),
     });
 
-    if (!response.ok) throw new Error(`Hugging Face API request failed with status ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Hugging Face API Error:", errorText);
+        throw new Error(`Hugging Face API request failed with status ${response.status}`);
+    }
 
     const result = await response.json();
-    const answer = result[0]?.generated_text || "NO";
-    const isCoherent = answer.trim().toUpperCase() === "YES";
-    const reason = isCoherent ? "Data appears to be within expected parameters." : "Data appears to be an anomaly or out of the ordinary.";
-    return { isCoherent, reason, rawAnswer: answer };
+    
+    const isCoherent = result.labels[0] === "coherent data";
+    const reason = `The data was classified as '${result.labels[0]}' with a confidence score of ${result.scores[0].toFixed(2)}.`;
+
+    return { isCoherent, reason, rawResult: result };
+
   } catch (error) {
     console.error("Failed to analyze data with Hugging Face:", error);
     throw error;
