@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addOrUpdateDevice, getDeviceByPubKey, DeviceEntry } from "@/lib/deviceRegistry";
 import crypto from "crypto";
-import { createOnchainAccount } from "@/lib/solanaService";
+import { createAndMintNft } from "@/lib/solanaService";
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,12 +47,13 @@ export async function POST(req: NextRequest) {
     };
 
     if (!device.nftAddress) {
-      console.log("Creating new on-chain account for device...");
-      const result = await createOnchainAccount();
-      finalDeviceData.nftAddress = result.nftAddress;
-      finalDeviceData.txSignature = result.txSignature;
-      console.log(`On-chain account created: ${result.nftAddress}`);
-    }
+    console.log("Creating and minting a new NFT for the device...");
+    // Mude a chamada aqui!
+    const result = await createAndMintNft(); 
+    finalDeviceData.nftAddress = result.nftAddress;
+    finalDeviceData.txSignature = result.txSignature;
+    console.log(`NFT created: ${result.nftAddress}`);
+  }
 
     const updatedDevice = await addOrUpdateDevice(publicKey, finalDeviceData);
 

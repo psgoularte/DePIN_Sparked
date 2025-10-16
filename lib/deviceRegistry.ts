@@ -1,15 +1,15 @@
-// Importe seu cliente supabase já configurado
-import { supabase } from './supabaseClient'; // Ajuste o caminho se necessário
+import { supabase } from './supabaseClient';
 
-// A interface permanece a mesma
 export interface DeviceEntry {
   macAddress: string;
   publicKey: string;
-  nftAddress: string;
+  nftAddress: string | null;
   txSignature: string | null;
   lastTsSeen: number | null;
   revoked?: boolean;
   challenge?: string;
+  ownerAddress?: string | null;
+  claimToken?: string | null;
 }
 
 /**
@@ -22,10 +22,9 @@ export async function getDeviceByPubKey(publicKey: string): Promise<DeviceEntry 
     .from('devices')
     .select('*')
     .eq('publicKey', publicKey)
-    .single(); // .single() retorna um único objeto ou null
+    .single(); 
 
   if (error && error.code !== 'PGRST116') {
-    // PGRST116 é o código para "nenhuma linha encontrada", o que é esperado
     console.error("Erro ao buscar dispositivo por publicKey:", error);
     throw error;
   }
@@ -62,7 +61,7 @@ export async function getDeviceByNft(nftAddress: string): Promise<DeviceEntry | 
  */
 export async function addOrUpdateDevice(publicKey: string, deviceData: Partial<DeviceEntry>): Promise<DeviceEntry> {
   const deviceToUpsert = {
-    publicKey, // Garante que a chave primária está no objeto
+    publicKey, 
     ...deviceData,
   };
 
@@ -70,7 +69,7 @@ export async function addOrUpdateDevice(publicKey: string, deviceData: Partial<D
     .from('devices')
     .upsert(deviceToUpsert)
     .select()
-    .single(); // Retorna o objeto atualizado
+    .single(); 
 
   if (error || !data) {
     console.error("Erro ao adicionar ou atualizar dispositivo:", error);
@@ -98,4 +97,18 @@ export async function revokeDevice(nftAddress: string): Promise<void> {
   if (count === 0) {
     throw new Error("Dispositivo não encontrado para revogar.");
   }
+}
+
+export async function getDeviceByClaimToken(claimToken: string): Promise<DeviceEntry | null> {
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('claimToken', claimToken)
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error("Error fetching device by claim token:", error);
+    throw error;
+  }
+  return data;
 }
