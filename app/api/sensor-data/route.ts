@@ -1,12 +1,15 @@
+// app/api/sensor-data/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getDeviceByNft } from "@/lib/deviceRegistry";
+import stringify from "json-stable-stringify";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { nftAddress, signature, payload } = body;
 
-    if (!nftAddress || !signature || !payload) {
+    const payloadString = payload ? stringify(payload) : undefined;
+    if (!nftAddress || !signature || !payloadString) {
       return NextResponse.json(
         { error: "Missing required fields: nftAddress, signature, or payload" },
         { status: 400 }
@@ -23,7 +26,6 @@ export async function POST(req: NextRequest) {
     const BN = (await import("bn.js")).default;
     const ec = new elliptic.ec("secp256k1");
 
-    const payloadString = JSON.stringify(payload);
     const msgHash = sha256(payloadString);
     
     const key = ec.keyFromPublic(device.publicKey, "hex");
@@ -34,6 +36,8 @@ export async function POST(req: NextRequest) {
 
     const isValid = key.verify(msgHash, sig);
     if (!isValid) {
+      console.log("Signature verification failed.");
+      console.log("String signed by device (reconstructed on server):", payloadString);
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
