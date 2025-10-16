@@ -6,7 +6,7 @@ import { createOnchainAccount } from "@/lib/solanaService";
 
 export async function POST(req: NextRequest) {
   try {
-    // Importa libs nativas/difíceis dinamicamente
+    // Importa libs dinamicamente
     const { randomBytes } = await import("crypto");
     const { sha256 } = await import("js-sha256");
     const { ec: EC } = await import("elliptic");
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === Etapa 1: gerar challenge ===
+    // Etapa: gerar challenge
     if (!signature && !challenge) {
       const nonce = randomBytes(32).toString("hex");
       await addOrUpdateDevice(publicKey, {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ challenge: nonce });
     }
 
-    // === Etapa 2: validar assinatura ===
+    // Etapa: validar assinatura
     const device = await getDevice(publicKey);
     if (!device || !device.challenge) {
       return NextResponse.json(
@@ -43,10 +43,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const pub = ec.keyFromPublic(publicKey, "hex");
-    const hashHex = sha256(Buffer.from(device.challenge, "hex"));
-    const verified = pub.verify(hashHex, signature);
+    // --- Corrigir formato da chave pública para elliptic ---
+    const pubKeyXY = publicKey.startsWith("04") ? publicKey.slice(2) : publicKey;
+    const pub = ec.keyFromPublic(pubKeyXY, "hex");
 
+    // --- Hash do challenge ---
+    const hashHex = sha256(Buffer.from(device.challenge, "hex"));
+
+    // --- Extrair r+s da assinatura hex concatenada ---
+    if (!signature || signature.length !== 128) {
+      return NextResponse.json(
+        { error: "assinatura inválida (formato errado)" },
+        { status: 400 }
+      );
+    }
+    const sigObj = { r: signature.slice(0, 64), s: signature.slice(64, 128) };
+
+    // --- Verificar assinatura ---
+    const verified = pub.verify(hashHex, sigObj);
     if (!verified) {
       return NextResponse.json(
         { error: "assinatura inválida" },
@@ -54,9 +68,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // === Cria conta on-chain ===
+    // Etapa: criar conta on-chain
     const { nftAddress, txSignature } = await createOnchainAccount();
 
+    // Etapa: Atualizar registro
     await addOrUpdateDevice(publicKey, {
       macAddress,
       publicKey,
