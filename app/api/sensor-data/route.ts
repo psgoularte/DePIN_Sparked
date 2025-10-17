@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeviceByNft, addOrUpdateDevice } from "@/lib/deviceRegistry";
 import stringify from "json-stable-stringify";
+import { getNftOwner } from "@/lib/solanaService";
 
 async function analyzeWithFallbackModel(payloadString: string, HUGGINGFACE_TOKEN: string) {
   console.log("⚠️ Primary AI model failed. Using fallback classification model.");
@@ -104,9 +105,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Data timestamp is in the future." }, { status: 400 });
     }
 
-    const device = await getDeviceByNft(nftAddress);
+    let device = await getDeviceByNft(nftAddress);
     if (!device) {
       return NextResponse.json({ error: "Device not registered" }, { status: 404 });
+    }
+
+    const blockchainOwner = await getNftOwner(nftAddress);
+
+    if (blockchainOwner && blockchainOwner !== device.ownerAddress) {
+      console.log(`Atualização de dono detetada! NFT ${nftAddress} foi transferida de ${device.ownerAddress} para ${blockchainOwner}.`);
+
+      device = await addOrUpdateDevice(device.publicKey, { ownerAddress: blockchainOwner });
     }
 
     const elliptic = await import("elliptic");

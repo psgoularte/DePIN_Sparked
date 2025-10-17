@@ -1,5 +1,10 @@
 import { supabase } from './supabaseClient';
 
+
+/**
+ * Define a estrutura de dados para um dispositivo no banco de dados Supabase.
+ * Esta interface serve como o "cache" de informações do dispositivo.
+ */
 export interface DeviceEntry {
   macAddress: string;
   publicKey: string;
@@ -99,6 +104,12 @@ export async function revokeDevice(nftAddress: string): Promise<void> {
   }
 }
 
+
+/**
+ * Busca um dispositivo no banco de dados usando o endereço da sua NFT associada.
+ * @param {string} nftAddress - O endereço da NFT do dispositivo.
+ * @returns {Promise<DeviceEntry | null>} O registro do dispositivo ou nulo se não for encontrado.
+ */
 export async function getDeviceByClaimToken(claimToken: string): Promise<DeviceEntry | null> {
   const { data, error } = await supabase
     .from('devices')

@@ -1,5 +1,5 @@
 import { Connection, Keypair, PublicKey, clusterApiUrl, Transaction } from "@solana/web3.js";
-import { getOrCreateAssociatedTokenAccount, createTransferInstruction } from "@solana/spl-token"; 
+import { getOrCreateAssociatedTokenAccount, createTransferInstruction, AccountLayout } from "@solana/spl-token"; 
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { createNft, mplTokenMetadata } from '@metaplex-foundation/mpl-token-metadata';
 import { keypairIdentity, generateSigner, percentAmount } from '@metaplex-foundation/umi';
@@ -16,6 +16,12 @@ const umi = createUmi(SOLANA_RPC_URL).use(mplTokenMetadata());
 const serverUmiSigner = umi.eddsa.createKeypairFromSecretKey(serverKeypair.secretKey);
 umi.use(keypairIdentity(serverUmiSigner));
 
+
+/**
+ * Cria (minta) uma nova NFT para servir como a identidade digital soberana de um dispositivo.
+ * A carteira do servidor será a dona inicial da NFT.
+ * @returns {Promise<{nftAddress: string, txSignature: string}>} Um objeto contendo o endereço da nova NFT e a assinatura da transação de criação.
+ */
 export async function createAndMintNft() {
   const mint = generateSigner(umi);
   console.log("Mintando uma nova NFT para o dispositivo...");
@@ -34,6 +40,13 @@ export async function createAndMintNft() {
   return { nftAddress, txSignature };
 }
 
+
+/**
+ * Transfere a propriedade de uma NFT da carteira do servidor para a carteira de um novo dono (usuário final).
+ * @param {string} nftMintAddress - O endereço da NFT (mint address) a ser transferida.
+ * @param {string} newOwnerAddress - O endereço da carteira Solana do novo dono.
+ * @returns {Promise<string>} A assinatura da transação de transferência.
+ */
 export async function transferNft(nftMintAddress: string, newOwnerAddress: string) {
   const mintPublicKey = new PublicKey(nftMintAddress);
   const newOwnerPublicKey = new PublicKey(newOwnerAddress);
@@ -69,4 +82,39 @@ export async function transferNft(nftMintAddress: string, newOwnerAddress: strin
 
   console.log(`Transferência CONFIRMADA com sucesso! Assinatura: ${signature}`);
   return signature;
+}
+
+
+/**
+ * Consulta a blockchain Solana para encontrar o endereço da carteira do dono atual de uma NFT.
+ * Esta função é a "fonte da verdade" para a propriedade de um dispositivo.
+ * @param {string} nftMintAddress - O endereço da NFT (mint address) a ser verificado.
+ * @returns {Promise<string | null>} O endereço do dono atual como uma string, ou nulo se não for encontrado.
+ */
+export async function getNftOwner(nftMintAddress: string): Promise<string | null> {
+  try {
+    const mintPublicKey = new PublicKey(nftMintAddress);
+    
+    const largestAccounts = await connection.getTokenLargestAccounts(mintPublicKey);
+    const tokenAccountAddress = largestAccounts.value[0]?.address;
+
+    if (!tokenAccountAddress) {
+      console.error(`Nenhuma conta de token encontrada para a NFT: ${nftMintAddress}`);
+      return null;
+    }
+
+    const accountInfo = await connection.getAccountInfo(tokenAccountAddress);
+    if (!accountInfo) {
+      return null;
+    }
+
+    const decodedAccountInfo = AccountLayout.decode(accountInfo.data);
+    const ownerAddress = new PublicKey(decodedAccountInfo.owner).toBase58();
+
+    return ownerAddress;
+
+  } catch (error) {
+    console.error("Falha ao obter o dono da NFT da blockchain:", error);
+    return null;
+  }
 }
