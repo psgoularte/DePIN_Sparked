@@ -22,43 +22,43 @@ print(f"--- FIM DEBUG ---")
 # --- FIM DEBUGGING ---
 
 if not REDIS_URL:
-    print("❌ Erro: Variável de ambiente UPSTASH_REDIS_URL não definida.")
-    exit(1)
+    print("❌ Erro: Variável de ambiente UPSTASH_REDIS_URL não definida.")
+    exit(1)
 
 try:
-    # Conecta ao Redis usando a URL (funciona bem com Upstash)
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True) # decode_responses=True para obter strings
-    redis_client.ping() # Testa a conexão
-    print("✅ Conectado ao Redis.")
+    # Conecta ao Redis usando a URL (funciona bem com Upstash)
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True) # decode_responses=True para obter strings
+    redis_client.ping() # Testa a conexão
+    print("✅ Conectado ao Redis.")
 except redis.exceptions.ConnectionError as e:
-    print(f"❌ Erro ao conectar ao Redis: {e}")
-    exit(1)
+    print(f"❌ Erro ao conectar ao Redis: {e}")
+    exit(1)
 
 # --- Configuração do Flask ---
 app = Flask(__name__)
 
 def generate_hash(data: dict) -> str:
-    """Gera hash SHA-256 dos dados, garantindo ordem das chaves."""
-    json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
-    hash_object = hashlib.sha256(json_str.encode('utf-8'))
-    return hash_object.hexdigest()
+    """Gera hash SHA-256 dos dados, garantindo ordem das chaves."""
+    json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
+    hash_object = hashlib.sha256(json_str.encode('utf-8'))
+    return hash_object.hexdigest()
 
 def save_data_to_redis(payload: dict, data_hash: str) -> bool:
-    """
-    Salva o payload completo no Redis.
-    Usa uma chave combinando um prefixo e o hash dos dados.
-    Define um tempo de expiração (TTL) - opcional, mas recomendado.
-    """
-    try:
-        # Chave: "sensor_data:<hash_sha256>"
-        redis_key = f"sensor_data:{data_hash}"
-        # Valor: O payload completo serializado como JSON string
-        redis_value = json.dumps(payload, sort_keys=True)
-        
-        # Tempo de expiração em segundos (ex: 7 dias). Ajuste conforme necessário.
-        # Use -1 para nunca expirar (não recomendado para dados de sensor)
-        expiration_seconds = 7 * 24 * 60 * 60 # 7 dias
-        
+    """
+    Salva o payload completo no Redis.
+    Usa uma chave combinando um prefixo e o hash dos dados.
+    Define um tempo de expiração (TTL) - opcional, mas recomendado.
+    """
+    try:
+        # Chave: "sensor_data:<hash_sha256>"
+        redis_key = f"sensor_data:{data_hash}"
+        # Valor: O payload completo serializado como JSON string
+        redis_value = json.dumps(payload, sort_keys=True)
+
+        # Tempo de expiração em segundos (ex: 7 dias). Ajuste conforme necessário.
+        # Use -1 para nunca expirar (não recomendado para dados de sensor)
+        expiration_seconds = 7 * 24 * 60 * 60 # 7 dias
+
         # Salva no Redis com expiração
         redis_client.setex(redis_key, expiration_seconds, redis_value)
         
