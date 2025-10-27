@@ -1,0 +1,3 @@
+flaskredis
+python-dotenv
+gunicorn
