@@ -10,7 +10,7 @@ declare global {
 
 let redis: Redis;
 
-const redisUrl = process.env.REDIS_URL;
+const redisUrl = process.env.UPSTASH_REDIS_URL;
 
 if (!redisUrl) {
   // Lança um erro se a URL do Redis não estiver nas variáveis de ambiente.
