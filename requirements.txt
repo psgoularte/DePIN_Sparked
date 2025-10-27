@@ -1,3 +1,4 @@
-flaskredis
+flask
+redis
 python-dotenv
 gunicorn
