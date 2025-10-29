@@ -11,8 +11,8 @@
 #include <algorithm>
 
 // --- Network Configuration ---
-const char* ssid = "Pousada2";
-const char* password = "2(Pous@daBU]@25";
+const char* ssid = "BARROSO 420";
+const char* password = "Barroso56@#";
 const char* registerApiEndpoint = "https://sparked-three.vercel.app/api/register-device";
 const char* dataApiEndpoint = "https://sparked-three.vercel.app/api/sensor-data";
 
@@ -183,9 +183,20 @@ void setup() {
   Serial.println("\nConnected!");
 
   // --- Initialize NTP Client to get current time ---
+  Serial.println("Starting NTP client...");
   timeClient.begin();
-  timeClient.update();
-  Serial.println("NTP client started.");
+  timeClient.update(); // Envia a primeira requisição
+
+  Serial.print("Waiting for NTP time sync");
+  while (timeClient.getEpochTime() < 1704067200) { 
+    delay(1000);
+    Serial.print(".");
+    timeClient.update(); 
+  }
+
+  Serial.println("\nNTP time synced!");
+  Serial.printf("Current Epoch Time: %lu\n", timeClient.getEpochTime());
+ Serial.println("Current Formatted Time: " + timeClient.getFormattedTime());
 
   if (!loadPrivateKey()) {
     Serial.println("Generating new key...");

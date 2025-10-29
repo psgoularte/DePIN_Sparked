@@ -28,8 +28,9 @@ const MEMO_PROGRAM_ID = new PublicKey("Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFM
  */
 export async function POST(req: NextRequest) {
     // --- 1. Autorização ---
-    const authHeader = req.headers.get('authorization');
-    if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
+    const vercelCronSecret = req.headers.get('x-vercel-cron-secret');
+    
+    if (!CRON_SECRET || vercelCronSecret !== CRON_SECRET) {
         return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
