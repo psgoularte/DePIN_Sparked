@@ -165,28 +165,28 @@ export async function POST(req: NextRequest) {
     // Este bloqueio é definido *após* a assinatura ser validada
     await redis.set(rateLimitKey, "true", "EX", DATA_RATE_LIMIT_SECONDS);
 
-    // 8. Salva os dados no Redis e atualiza o timestamp no Supabase
+    // 8. Salva os dados no Lote do Redis e atualiza o timestamp no Supabase
     const now = Date.now();
-    // Chave para armazenar os dados do sensor
-    const dataKey = `iot_data:${nftAddress}`;
-    // Define por quanto tempo os dados do sensor devem ser guardados (ex: 7 dias)
-    const DATA_EXPIRATION_SECONDS = 60 * 60 * 24 * 7; // 7 dias
+    // Chave da LISTA onde todos os dados válidos serão enfileirados
+    const dataBatchKey = "sensor_data_batch"; 
+    
+    // NOTA: O payloadString já está serializado e validado
+    // const payloadString = payload ? stringify(payload) : undefined;
 
     try {
-      // Usamos `Promise.allSettled` para executar ambas as tarefas assíncronas.
-      // Isso garante que, mesmo se um falhar, o outro pode ter sucesso.
+      // Executa as duas operações de banco de dados em paralelo
       const results = await Promise.allSettled([
-        // 8a. Salva o payload de dados no Redis
-        redis.set(dataKey, payloadString, "EX", DATA_EXPIRATION_SECONDS),
-        // 8b. Atualiza o 'lastTsSeen' no Supabase (para monitoramento)
+        // 8a. Adiciona o payload no final da lista 'sensor_data_batch' no Redis
+        redis.rpush(dataBatchKey, payloadString!),
+        // 8b. Atualiza o 'lastTsSeen' no Supabase
         addOrUpdateDevice(device.publicKey, { lastTsSeen: now })
       ]);
 
       // Log de sucesso/falha para o salvamento no Redis
       if (results[0].status === 'fulfilled') {
-        console.log(`Dados salvos com sucesso no Redis (Chave: ${dataKey})`);
+        console.log(`Dados adicionados ao lote com sucesso (Chave: ${dataBatchKey})`);
       } else {
-        console.error("Falha ao salvar dados no Redis:", results[0].reason);
+        console.error("Falha ao adicionar dados ao lote no Redis:", results[0].reason);
       }
       
       // Log de sucesso/falha para a atualização no Supabase
@@ -195,8 +195,7 @@ export async function POST(req: NextRequest) {
       }
 
     } catch (dbError: any) {
-      // Este catch pegaria um erro geral, embora 'allSettled' deva tratar erros individuais
-      console.error("Erro ao tentar salvar dados ou atualizar timestamp:", dbError.message);
+      console.error("Erro ao tentar salvar dados no lote ou atualizar timestamp:", dbError.message);
     }
     
     // 9. (Opcional) Análise de IA
