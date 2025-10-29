@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
         // 8a. Adiciona o payload no final da lista 'sensor_data_batch' no Redis
         redis.rpush(dataBatchKey, payloadString!),
         // 8b. Atualiza o 'lastTsSeen' no Supabase
-        addOrUpdateDevice(device.publicKey, { lastTsSeen: now })
+        addOrUpdateDevice(device.publicKey, { lastTsSeen: now, macAddress: device.macAddress })
       ]);
 
       // Log de sucesso/falha para o salvamento no Redis
