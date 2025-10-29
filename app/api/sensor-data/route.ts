@@ -1,5 +1,3 @@
-// Em: app/api/sensor-data/route.ts (ou similar)
-
 import { NextRequest, NextResponse } from "next/server";
 // Funções do registro de dispositivos e serviço Solana
 import { getDeviceByNft, addOrUpdateDevice, DeviceEntry } from "@/lib/deviceRegistry"; 
@@ -8,11 +6,13 @@ import { getNftOwner } from "@/lib/solanaService";
 import redis from "@/lib/redis";
 // Para garantir a serialização canônica do JSON
 import stringify from "json-stable-stringify";
+import { createClient } from '@supabase/supabase-js';
 
-/**
- * (Opcional) Função assíncrona para analisar a plausibilidade dos dados usando a API da Hugging Face.
- * ... (Todo o seu código da função analyzeDataWithHuggingFace vai aqui, se você decidir usá-la) ...
- */
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_ANON_KEY! 
+);
+
 async function analyzeDataWithHuggingFace(payloadString: string) {
   // Modelo primário (instrução)
   const PRIMARY_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1";
@@ -166,37 +166,51 @@ export async function POST(req: NextRequest) {
     await redis.set(rateLimitKey, "true", "EX", DATA_RATE_LIMIT_SECONDS);
 
     // 8. Salva os dados no Lote do Redis e atualiza o timestamp no Supabase
-    const now = Date.now();
-    // Chave da LISTA onde todos os dados válidos serão enfileirados
-    const dataBatchKey = "sensor_data_batch"; 
-    
-    // NOTA: O payloadString já está serializado e validado
-    // const payloadString = payload ? stringify(payload) : undefined;
+    const now = Date.now();
+    const dataBatchKey = "sensor_data_batch"; 
 
-    try {
-      // Executa as duas operações de banco de dados em paralelo
-      const results = await Promise.allSettled([
-        // 8a. Adiciona o payload no final da lista 'sensor_data_batch' no Redis
-        redis.rpush(dataBatchKey, payloadString!),
-        // 8b. Atualiza o 'lastTsSeen' no Supabase
-        addOrUpdateDevice(device.publicKey, { lastTsSeen: now, macAddress: device.macAddress })
-      ]);
+    // Converte o timestamp do payload (segundos) para o formato ISO (TIMESTAMPTZ)
+    const payloadTimestampISO = new Date(payload.timestamp * 1000).toISOString();
 
-      // Log de sucesso/falha para o salvamento no Redis
+    try {
+      const results = await Promise.allSettled([
+        // 8a. Adiciona ao lote do Redis (para o 'anchor')
+        redis.rpush(dataBatchKey, payloadString!),
+
+        // 8b. Atualiza o 'lastTsSeen' no Supabase (tabela de 'devices')
+        addOrUpdateDevice(device.publicKey, { lastTsSeen: now, macAddress: device.macAddress }),
+
+        // 8c. [NOVA ETAPA] Insere o dado bruto na tabela 'sensor_readings'
+        supabase.from('sensor_readings').insert({
+          nft_address: nftAddress,
+          timestamp: payloadTimestampISO, // O timestamp do dado em si
+          data: payload // O objeto JSONB completo
+        })
+      ]);
+
+      // Log de sucesso/falha para o Redis
       if (results[0].status === 'fulfilled') {
-        console.log(`Dados adicionados ao lote com sucesso (Chave: ${dataBatchKey})`);
+        console.log(`Dados adicionados ao lote Redis (Chave: ${dataBatchKey})`);
       } else {
         console.error("Falha ao adicionar dados ao lote no Redis:", results[0].reason);
       }
       
-      // Log de sucesso/falha para a atualização no Supabase
+      // Log de sucesso/falha para a atualização do device
       if (results[1].status === 'rejected') {
         console.error("Falha ao atualizar 'lastTsSeen' no Supabase:", results[1].reason);
       }
 
-    } catch (dbError: any) {
-      console.error("Erro ao tentar salvar dados no lote ou atualizar timestamp:", dbError.message);
-    }
+      // Log de sucesso/falha para a inserção dos readings
+      if (results[2].status === 'fulfilled') {
+        console.log(`Dado bruto salvo no Supabase (sensor_readings)`);
+      } else {
+        // 'results[2].reason' pode conter erros de chave, etc.
+        console.error("Falha ao salvar dado bruto no Supabase:", (results[2] as PromiseRejectedResult).reason);
+      }
+
+    } catch (dbError: any) {
+      console.error("Erro ao tentar salvar dados no lote ou atualizar timestamp:", dbError.message);
+    }
     
     // 9. (Opcional) Análise de IA
     // let aiAnalysis: any = await analyzeDataWithHuggingFace(payloadString);
