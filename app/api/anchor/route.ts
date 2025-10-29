@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
             throw new Error("SERVER_WALLET_SECRET_KEY não configurada!");
         }
 
-        const connection = new Connection(clusterApiUrl('testnet'), 'confirmed');
+        const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
         const payer = Keypair.fromSecretKey(bs58.decode(SERVER_WALLET_SECRET));
 
         // --- 6. Criar a Transação com Memo ---
