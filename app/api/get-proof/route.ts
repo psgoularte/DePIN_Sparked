@@ -1,4 +1,3 @@
-// Em: app/api/get-proof/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import redis from "@/lib/redis";
 

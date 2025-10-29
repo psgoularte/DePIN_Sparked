@@ -1,4 +1,3 @@
-// Em: app/api/anchor/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import redis from "@/lib/redis"; // Seu cliente Redis
 import { 
