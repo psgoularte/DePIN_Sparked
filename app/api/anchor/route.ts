@@ -1,3 +1,4 @@
+import { put } from '@vercel/blob';
 import { NextRequest, NextResponse } from "next/server";
 import redis from "@/lib/redis"; // Seu cliente Redis
 import { 
@@ -96,40 +97,42 @@ export async function POST(req: NextRequest) {
         console.log(`✅ Sucesso! Transação enviada: ${signature}`);
         console.log(`Raiz ${rootHex} ancorada na Testnet via Memo.`);
 
-        // --- 8. Salvar as Provas para cada Dado ---
-        
-        // 'leaves' são os hashes de cada payload
-        const proofPromises = leaves.map((leafBuffer, index) => {
-            // Pega a prova para este 'leaf'
-            const proof = tree.getProof(leafBuffer);
-            
-            // Formata a prova para ser salva como JSON
-            const formattedProof = proof.map(p => ({
-                position: p.position,
-                data: p.data.toString('hex')
-            }));
+        // --- 8. Salvar as Provas no Redis (Quente) e no Vercel Blob (Frio) ---
+        const savePromises = leaves.map(async (leafBuffer, index) => {
+        const leafHash = leafBuffer; 
+        const originalPayload = payloads[index];
 
-            // O hash do dado (o "leaf")
-            const leafHash = leafBuffer;
-
-            // O que vamos salvar
-            const proofData = JSON.stringify({
-                root: rootHex,           // A raiz deste lote
-                proof: formattedProof, // A prova
-                signature: signature,    // A transação na Solana
-                originalData: payloads[index] // O dado original (para referência)
+        // O que vamos salvar
+        const proofData = JSON.stringify({
+                root: rootHex,
+                proof: tree.getProof(leafBuffer).map(p => ({
+                    position: p.position,
+                    data: p.data.toString('hex')
+                })),
+                signature: signature,
+                originalData: originalPayload
             });
 
-            // A chave será 'proof:<hash_do_dado>'
-            const proofKey = `proof:${leafHash}`;
-            
-            // Salva no Redis (ex: expira em 30 dias)
-            // Usamos 'set' em vez de 'mset' para simplificar
-            return redis.set(proofKey, proofData, "EX", 60 * 60 * 24 * 30);
+        // O "nome do arquivo" no Blob (e a chave no Redis)
+        const proofKey = `proof:${leafHash}`;
+        const blobPathname = `proofs/${leafHash}.json`; // ex: proofs/70fc07...505.json
+
+        // Retorna um array de promessas: uma para o Redis, uma para o Blob
+            return [
+                // 1. Salva no Redis (expira em 30 dias)
+                redis.set(proofKey, proofData, "EX", 60 * 60 * 24 * 30),
+
+                // 2. Salva no Vercel Blob (para sempre)
+                put(blobPathname, proofData, {
+                    access: 'public', // Torna o arquivo legível publicamente
+                    contentType: 'application/json'
+                })
+            ];
         });
 
-        await Promise.all(proofPromises);
-        console.log(`Salvas ${payloads.length} provas no Redis.`);
+        // Espera todas as promessas (achatadas) terminarem
+        await Promise.all(savePromises.flat()); 
+        console.log(`Salvas ${payloads.length} provas no Redis (30 dias) e no Vercel Blob (Permanente).`);
 
         // --- 9. Limpeza ---
         await redis.del(processingKey);
