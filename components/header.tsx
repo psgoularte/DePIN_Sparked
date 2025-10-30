@@ -1,8 +1,9 @@
+'use client';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wifi, LogOut, UserCircle } from 'lucide-react';
 import { Button } from './ui/button';
-import { useAuth } from '../lib/auth-context';
+import { useAuth } from '../lib/auth-context'; // Caminho corrigido
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -55,6 +56,7 @@ export function Header() {
     try {
       await signOut();
       toast.info('Signed out successfully');
+      navigate('/'); // Redireciona para home após logout
     } catch (error: any) {
       toast.error('Failed to sign out');
     }
@@ -139,7 +141,7 @@ export function Header() {
                     type="email"
                     placeholder="your@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                     required
                     className="bg-background border-border"
                   />
@@ -151,7 +153,7 @@ export function Header() {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                     required
                     className="bg-background border-border"
                   />
@@ -175,7 +177,7 @@ export function Header() {
                     type="text"
                     placeholder="Your name"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                     required
                     className="bg-background border-border"
                   />
@@ -187,7 +189,7 @@ export function Header() {
                     type="email"
                     placeholder="your@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                     required
                     className="bg-background border-border"
                   />
@@ -199,7 +201,7 @@ export function Header() {
                     type="password"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                     required
                     minLength={6}
                     className="bg-background border-border"
@@ -220,3 +222,4 @@ export function Header() {
     </>
   );
 }
+

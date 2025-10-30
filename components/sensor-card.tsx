@@ -1,9 +1,10 @@
-import { Sensor } from '@/lib/types';
+'use client';
+import { Sensor } from '../lib/types'; // Caminho corrigido
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Activity, Eye, EyeOff, Lock, AlertCircle, Calendar, Clock, Hexagon } from 'lucide-react';
-import { ImageWithFallback } from './figma/ImageWithFallback';
+import { ImageWithFallback } from './figma/ImageWithFallback'; // Assumindo que está em src/components/figma/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 interface SensorCardProps {
@@ -190,12 +191,14 @@ export function SensorCard({ sensor, liveData, onViewDetails, showMiniSparkline 
                 stroke="var(--chart-1)"
                 strokeWidth="2"
                 points={liveData.map((d, i) => {
-                  const x = (i / (liveData.length - 1)) * 100;
+                  // CORREÇÃO: Verificar se liveData.length > 1
+                  const x = (liveData.length > 1) ? (i / (liveData.length - 1)) * 100 : 50;
                   const minVal = Math.min(...liveData.map(p => p.value));
                   const maxVal = Math.max(...liveData.map(p => p.value));
                   const range = maxVal - minVal || 1;
                   const y = 100 - ((d.value - minVal) / range) * 100;
-                  return `${x}%,${y}%`;
+                   // CORREÇÃO: Garantir que Y seja um número finito
+                  return `${x}%,${isFinite(y) ? y : 50}%`;
                 }).join(' ')}
               />
             </svg>
@@ -213,3 +216,4 @@ export function SensorCard({ sensor, liveData, onViewDetails, showMiniSparkline 
     </Card>
   );
 }
+

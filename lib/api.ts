@@ -21,6 +21,10 @@ const apiFetch = async (url: string, token: string, options: RequestInit = {}) =
     },
   });
   if (!response.ok) await handleApiError(response);
+  // Algumas APIs (como delete) podem não retornar JSON
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return null;
+  }
   return response.json();
 };
 
@@ -43,7 +47,8 @@ const publicApiFetch = async (url: string, options: RequestInit = {}) => {
 export const authAPI = {
   signUp: (email: string, password: string, name: string): Promise<void> => {
     // Esta API é especial, não é autenticada
-    return publicApiFetch('/api/auth/signup', { // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return publicApiFetch('/api/auth/signup', { 
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     });
@@ -51,30 +56,44 @@ export const authAPI = {
 };
 
 // --- API de Sensores (Privada) ---
+// Define o tipo para criação de sensor, baseado no que o 'register-sensor-dialog' envia
+type SensorCreateData = Omit<Sensor, 'id' | 'owner' | 'createdAt' | 'status' | 'lastReading' | 'updatedAt'>;
+
 export const sensorAPI = {
   list: (token: string): Promise<Sensor[]> => {
-    return apiFetch('/api/sensors', token); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return apiFetch('/api/sensors', token); 
   },
-create: (sensorData: Omit<Sensor, 'id' | 'owner' | 'createdAt' | 'status' | 'lastReading'>, token: string): Promise<Sensor> => {
+  create: (sensorData: SensorCreateData, token: string): Promise<Sensor> => {
+    // Você precisará criar esta API de backend
     return apiFetch('/api/sensors', token, {
       method: 'POST',
       body: JSON.stringify(sensorData),
     });
   },
   update: (id: string, updates: Partial<Sensor>, token: string): Promise<Sensor> => {
-    return apiFetch(`/api/sensors/${id}`, token, { // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return apiFetch(`/api/sensors/${id}`, token, { 
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   },
   delete: (id: string, token: string): Promise<void> => {
+     // Você precisará criar esta API de backend
     return apiFetch(`/api/sensors/${id}`, token, { method: 'DELETE' });
   },
-   retrieveClaimToken: async (walletPublicKey: string, macAddress: string, devicePublicKey: string, token: string): Promise<string> => {
+  
+  // NOVO: Função adicionada para corrigir o erro do register-sensor-dialog
+  retrieveClaimToken: async (walletPublicKey: string, macAddress: string, devicePublicKey: string, token: string): Promise<string> => {
     // Esta função chama a API /api/get-claim-token que você já tem
+    // A API que você forneceu em prompts anteriores espera 'publicKey'
     const response = await apiFetch('/api/get-claim-token', token, {
       method: 'POST',
-      body: JSON.stringify({ publicKey: devicePublicKey, macAddress, walletPublicKey }), // Enviando os dados esperados
+      body: JSON.stringify({ 
+        publicKey: devicePublicKey,
+        macAddress: macAddress, // Enviando dados extras caso sua API mude
+        walletPublicKey: walletPublicKey // Enviando dados extras caso sua API mude
+      }), 
     });
     
     if (!response.claimToken) {
@@ -87,20 +106,23 @@ create: (sensorData: Omit<Sensor, 'id' | 'owner' | 'createdAt' | 'status' | 'las
 // --- API de Stats (Privada) ---
 export const statsAPI = {
   get: (token: string): Promise<{ totalSensors: number, activeSensors: number, totalReadings: number, totalDatasets: number }> => {
-    return apiFetch('/api/stats', token); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return apiFetch('/api/stats', token); 
   },
 };
 
 // --- API de Leituras (Privada) ---
 export const readingAPI = {
   list: (sensorId: string, token: string, limit: number): Promise<Reading[]> => {
-    return apiFetch(`/api/readings?sensorId=${sensorId}&limit=${limit}`, token); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return apiFetch(`/api/readings?sensorId=${sensorId}&limit=${limit}`, token); 
   },
 };
 
 // --- API de Datasets (Privada) ---
 export const datasetAPI = {
   list: (sensorId: string, token: string): Promise<Dataset[]> => {
+    // Sua API /api/datasets deve suportar filtragem por sensorId
     return apiFetch(`/api/datasets?sensorId=${sensorId}`, token);
   },
   create: (data: { name: string, sensorId: string, startDate: Date, endDate: Date, isPublic: boolean }, token: string): Promise<Dataset> => {
@@ -110,17 +132,22 @@ export const datasetAPI = {
     });
   },
   update: (id: string, updates: Partial<Dataset>, token: string): Promise<Dataset> => {
-    return apiFetch(`/api/datasets/${id}`, token, { // Você precisará criar esta API
+     // Você precisará criar esta API de backend
+    return apiFetch(`/api/datasets/${id}`, token, {
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   },
   delete: (id: string, token: string): Promise<void> => {
+     // Você precisará criar esta API de backend
     return apiFetch(`/api/datasets/${id}`, token, { method: 'DELETE' });
   },
   anchor: (id: string, token: string): Promise<void> => {
-    // Esta é uma chamada especial, pode ser uma API diferente
-    return apiFetch(`/api/datasets/anchor`, token, { // API de ancoragem
+    // Esta chamada deve corresponder à sua API /api/anchor
+    // A API 'anchor' que você forneceu não aceita um 'datasetId', ela processa um lote.
+    // Vamos assumir que você tem uma API que aciona a ancoragem para um dataset específico.
+    // Você precisará criar esta API de backend
+    return apiFetch(`/api/datasets/anchor`, token, { 
       method: 'POST',
       body: JSON.stringify({ datasetId: id }),
     });
@@ -130,25 +157,32 @@ export const datasetAPI = {
 // --- API de Merkle (Privada) ---
 export const merkleAPI = {
   getHourlyRoot: (sensorId: string, token: string): Promise<{ merkleRoot: string }> => {
-    return apiFetch(`/api/merkle/hourly?sensorId=${sensorId}`, token); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return apiFetch(`/api/merkle/hourly?sensorId=${sensorId}`, token); 
   },
 };
 
 // --- API Pública (para home page, etc.) ---
 export const publicAPI = {
   getFeaturedSensors: (): Promise<{ sensors: SensorMetrics[] }> => {
-    return publicApiFetch('/api/public/featured'); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return publicApiFetch('/api/public/featured'); 
   },
   listPublicSensors: (): Promise<Sensor[]> => {
-    return publicApiFetch('/api/public/sensors'); // Você precisará criar esta API
+    // Você precisará criar esta API de backend
+    return publicApiFetch('/api/public/sensors');
   },
   getPublicSensor: (sensorId: string): Promise<Sensor> => {
+    // Você precisará criar esta API de backend
     return publicApiFetch(`/api/public/sensors/${sensorId}`);
   },
   getPublicDatasets: (sensorId: string): Promise<Dataset[]> => {
+    // Sua API /api/datasets pública
     return publicApiFetch(`/api/public/datasets?sensorId=${sensorId}`);
   },
   getPublicReadings: (sensorId: string, limit: number): Promise<Reading[]> => {
+    // Você precisará criar esta API de backend
     return publicApiFetch(`/api/public/readings?sensorId=${sensorId}&limit=${limit}`);
   },
 };
+

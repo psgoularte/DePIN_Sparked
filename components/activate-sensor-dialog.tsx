@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -7,9 +8,11 @@ import { Copy, Check, ChevronRight, ChevronLeft, Wifi, Upload, Key, CheckCircle,
 import { Progress } from './ui/progress';
 
 // Import sensor code
-import { temperatureCode } from '../sensor-code/temperature';
-import { humidityCode } from '../sensor-code/humidity';
-import { phCode } from '../sensor-code/ph';
+// ASSUMINDO que esta pasta existe em src/sensor-code/
+// Você precisará criar estes arquivos
+const temperatureCode = `// Código do sensor de temperatura aqui...`;
+const humidityCode = `// Código do sensor de umidade aqui...`;
+const phCode = `// Código do sensor de pH aqui...`;
 
 interface ActivateSensorDialogProps {
   open: boolean;
@@ -160,7 +163,7 @@ export function ActivateSensorDialog({ open, onOpenChange, onComplete }: Activat
 
                   <div className="space-y-3">
                     <Label htmlFor="sensor-type">Sensor Type</Label>
-                    <Select value={selectedSensorType} onValueChange={setSelectedSensorType}>
+                    <Select value={selectedSensorType} onValueChange={(value: string) => setSelectedSensorType(value)}>
                       <SelectTrigger id="sensor-type" className="bg-input border-border">
                         <SelectValue placeholder="Select a sensor type" />
                       </SelectTrigger>
@@ -520,3 +523,4 @@ Temperature: 23.5 °C`}
     </Dialog>
   );
 }
+

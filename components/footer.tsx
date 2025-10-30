@@ -1,3 +1,4 @@
+'use client';
 import { ExternalLink } from 'lucide-react';
 
 export function Footer() {
@@ -31,3 +32,4 @@ export function Footer() {
     </footer>
   );
 }
+

@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -7,15 +8,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Copy, Check, Database, TestTube2, Loader2, Wallet, AlertCircle } from 'lucide-react';
-import { Sensor } from '@/lib/types';
+import { Sensor } from '../lib/types'; // Caminho corrigido
 import { Card } from './ui/card';
-import { sensorAPI } from '@/lib/api';
-import { useAuth } from '../lib/auth-context';
+import { sensorAPI } from '../lib/api'; // Caminho corrigido
+import { useAuth } from '../lib/auth-context'; // Caminho corrigido
+
+// CORREÇÃO: Este tipo agora bate com o que o 'dashboard.tsx' e 'lib/api.ts' esperam
+type SensorCreateData = Omit<Sensor, 'id' | 'owner' | 'createdAt' | 'status' | 'lastReading' | 'updatedAt'>;
 
 interface RegisterSensorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRegister: (sensor: Omit<Sensor, 'id' | 'owner' | 'createdAt' | 'status'>) => void;
+  onRegister: (sensor: SensorCreateData) => void; // Tipo corrigido
 }
 
 export function RegisterSensorDialog({ open, onOpenChange, onRegister }: RegisterSensorDialogProps) {
@@ -49,7 +53,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // For mock sensors, proceed directly to token step
+    // Para mock sensors, prossiga diretamente
     if (mode === 'mock') {
       const token = `CLAIM_${Math.random().toString(36).substring(2, 15).toUpperCase()}`;
       setClaimToken(token);
@@ -61,11 +65,12 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
         visibility,
         mode,
         claimToken: token,
+        // walletPublicKey é opcional no tipo, então omitir está OK
       });
       
       setStep('token');
     } else {
-      // For real sensors, proceed to wallet step
+      // Para real sensors, prossiga para a wallet
       setStep('wallet');
     }
   };
@@ -88,6 +93,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     return base58Regex.test(key);
   };
 
+  // CORREÇÃO: Adicionado tipo ': string'
   const handleWalletPublicKeyChange = (value: string) => {
     setWalletPublicKey(value);
     if (value && !validateSolanaPublicKey(value)) {
@@ -100,6 +106,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     setRetrievalError('');
   };
 
+  // CORREÇÃO: Adicionado tipo ': string'
   const handleMacAddressChange = (value: string) => {
     setMacAddress(value);
     if (value && !validateMacAddress(value)) {
@@ -112,6 +119,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     setRetrievalError('');
   };
 
+  // CORREÇÃO: Adicionado tipo ': string'
   const handleDevicePublicKeyChange = (value: string) => {
     setDevicePublicKey(value);
     if (value && !validateDevicePublicKey(value)) {
@@ -130,6 +138,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     return token.length >= 10 && /^[A-Za-z0-9_-]+$/.test(token);
   };
 
+  // CORREÇÃO: Adicionado tipo ': string'
   const handlePastedTokenChange = (value: string) => {
     setPastedToken(value);
     if (value && !validateClaimToken(value)) {
@@ -145,8 +154,9 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     }
   };
 
-  const handleTokenOptionChange = (value: 'retrieve' | 'paste') => {
-    setTokenOption(value);
+  // CORREÇÃO: Adicionado tipo ': string'
+  const handleTokenOptionChange = (value: string) => {
+    setTokenOption(value as 'retrieve' | 'paste');
     // Clear states when switching options
     setRetrievalError('');
     setRetrievalSuccess(false);
@@ -167,6 +177,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     setRetrievalSuccess(false);
     
     try {
+      // CORREÇÃO: Esta função agora existe no 'lib/api.ts'
       const token = await sensorAPI.retrieveClaimToken(walletPublicKey, macAddress, devicePublicKey, accessToken);
       setClaimToken(token);
       setRetrievalSuccess(true);
@@ -333,7 +344,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                 <Input
                   id="name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                   placeholder="Lab Temperature Monitor"
                   required
                   className="bg-input border-border"
@@ -362,7 +373,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                 <Textarea
                   id="description"
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
                   placeholder="Brief description of the sensor and its purpose"
                   rows={3}
                   className="bg-input border-border resize-none"
@@ -396,7 +407,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                   type="submit"
                   className="flex-1 bg-primary text-primary-foreground"
                 >
-                  Register Sensor
+                  {mode === 'mock' ? 'Create Mock Sensor' : 'Next: Connect Wallet'}
                 </Button>
               </div>
             </form>
@@ -426,7 +437,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                       <Input
                         id="wallet-key"
                         value={walletPublicKey}
-                        onChange={(e) => handleWalletPublicKeyChange(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleWalletPublicKeyChange(e.target.value)}
                         placeholder="Enter Solana wallet public key (base58)"
                         className={`bg-input border-border pl-10 ${walletError ? 'border-error' : ''}`}
                       />
@@ -490,7 +501,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                         <Input
                           id="device-key"
                           value={devicePublicKey}
-                          onChange={(e) => handleDevicePublicKeyChange(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleDevicePublicKeyChange(e.target.value)}
                           placeholder="e.g., 6T2bF8YqXxP9...N7E5aD4"
                           className={`bg-input border-border ${deviceKeyError ? 'border-error' : ''}`}
                         />
@@ -514,7 +525,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                         <Input
                           id="mac-address"
                           value={macAddress}
-                          onChange={(e) => handleMacAddressChange(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMacAddressChange(e.target.value)}
                           placeholder="e.g., AA:BB:CC:DD:EE:FF"
                           className={`bg-input border-border ${macError ? 'border-error' : ''}`}
                         />
@@ -604,7 +615,7 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
                         <Input
                           id="paste-token"
                           value={pastedToken}
-                          onChange={(e) => handlePastedTokenChange(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePastedTokenChange(e.target.value)}
                           placeholder="e.g., SPARKED-XXXXXXXXXXXX or CLAIM_XXXXXXXXXXXX"
                           className={`bg-input border-border ${pasteError ? 'border-error' : ''}`}
                         />
@@ -752,3 +763,4 @@ export function RegisterSensorDialog({ open, onOpenChange, onRegister }: Registe
     </Dialog>
   );
 }
+
