@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient';
 
-
 /**
  * Define a estrutura de dados para um dispositivo no banco de dados Supabase.
  * Esta interface serve como o "cache" de informações do dispositivo.
@@ -15,6 +14,11 @@ export interface DeviceEntry {
   challenge?: string;
   ownerAddress?: string | null;
   claimToken?: string | null;
+
+  // --- Novos campos para Dispositivos Mock ---
+  is_mock?: boolean;
+  mock_sensor_type?: string | null;
+  mock_private_key?: string | null; // Apenas para uso do backend!
 }
 
 /**
@@ -58,10 +62,57 @@ export async function getDeviceByNft(nftAddress: string): Promise<DeviceEntry | 
 }
 
 /**
+ * [NOVA FUNÇÃO] Busca um dispositivo mock pelo NFT e pelo Dono.
+ * Usado para verificar se o usuário pode submeter dados para o mock.
+ * @param nftAddress O endereço do NFT.
+ * @param ownerAddress O endereço da carteira do dono.
+ * @returns O dispositivo (incluindo a private key) ou null.
+ */
+export async function getDeviceByNftAndOwner(nftAddress: string, ownerAddress: string): Promise<DeviceEntry | null> {
+  const { data, error } = await supabase
+    .from('devices')
+    .select('*')
+    .eq('nftAddress', nftAddress)
+    .eq('ownerAddress', ownerAddress)
+    .eq('is_mock', true) // Garante que é um mock
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    console.error("Erro ao buscar dispositivo mock por dono e NFT:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * [NOVA FUNÇÃO] Busca todos os dispositivos mock de um usuário.
+ * Útil para o frontend listar os mocks que o usuário pode controlar.
+ * NÃO retorna a chave privada por segurança.
+ * @param ownerAddress O endereço da carteira do dono.
+ * @returns Um array de dispositivos mock (parcial).
+ */
+export async function getMockDevicesByOwner(ownerAddress: string): Promise<Partial<DeviceEntry>[] | null> {
+  const { data, error } = await supabase
+    .from('devices')
+    .select('publicKey, nftAddress, macAddress, mock_sensor_type') // Campos seguros para o frontend
+    .eq('ownerAddress', ownerAddress)
+    .eq('is_mock', true);
+
+  if (error) {
+    console.error("Erro ao buscar mocks por dono:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+
+/**
  * Adiciona um novo dispositivo ou atualiza um existente.
  * Usa o método `upsert` do Supabase para eficiência.
  * @param publicKey A chave pública do dispositivo a ser atualizado/inserido.
- * @param deviceData Os dados parciais para atualizar ou os dados completos para inserir.
+ * @param deviceData Os dados parciais para atualizar (incluindo campos mock).
  * @returns O dispositivo criado ou atualizado.
  */
 export async function addOrUpdateDevice(publicKey: string, deviceData: Partial<DeviceEntry>): Promise<DeviceEntry> {
@@ -69,6 +120,11 @@ export async function addOrUpdateDevice(publicKey: string, deviceData: Partial<D
     publicKey, 
     ...deviceData,
   };
+
+  // Log para depuração ao criar mocks
+  if ((deviceData as any).is_mock) {
+    console.log("Upserting mock device:", deviceToUpsert);
+  }
 
   const { data, error } = await supabase
     .from('devices')
@@ -106,8 +162,8 @@ export async function revokeDevice(nftAddress: string): Promise<void> {
 
 
 /**
- * Busca um dispositivo no banco de dados usando o endereço da sua NFT associada.
- * @param {string} nftAddress - O endereço da NFT do dispositivo.
+ * Busca um dispositivo no banco de dados usando o token de reivindicação.
+ * @param {string} claimToken - O token de reivindicação do dispositivo.
  * @returns {Promise<DeviceEntry | null>} O registro do dispositivo ou nulo se não for encontrado.
  */
 export async function getDeviceByClaimToken(claimToken: string): Promise<DeviceEntry | null> {
